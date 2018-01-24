@@ -1,4 +1,4 @@
-package poller
+package promquery
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	"github.com/ScaleFT/monotime"
-	"github.com/jirwin/promquery/query"
 	"github.com/prometheus/client_golang/api"
 	prometheus "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
@@ -17,7 +16,7 @@ import (
 
 type Poller struct {
 	client        prometheus.API
-	queries       []*query.PromQuery
+	queries       []*PromQuery
 	initialValues sync.Map
 	timer         monotime.Timer
 }
@@ -39,7 +38,7 @@ func (p *Poller) query(ctx context.Context, q string) (string, error) {
 	}
 }
 
-func (p *Poller) getInitialValue(ctx context.Context, q *query.PromQuery) error {
+func (p *Poller) getInitialValue(ctx context.Context, q *PromQuery) error {
 	val, err := p.query(ctx, q.String())
 	if err != nil {
 		return err
@@ -59,7 +58,7 @@ func (p *Poller) Init(ctx context.Context) {
 	wg := sync.WaitGroup{}
 	for _, q := range p.queries {
 		wg.Add(1)
-		go func(q *query.PromQuery) {
+		go func(q *PromQuery) {
 			defer wg.Done()
 			err := p.getInitialValue(ctx, q)
 			if err != nil {
@@ -81,7 +80,7 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan bool {
 		wg := sync.WaitGroup{}
 		for _, q := range p.queries {
 			wg.Add(1)
-			go func(q *query.PromQuery) {
+			go func(q *PromQuery) {
 				defer wg.Done()
 				startingValue, ok := p.initialValues.Load(q.String())
 				if !ok {
@@ -142,9 +141,9 @@ func NewPoller(addr string, queries []string) (*Poller, error) {
 		seen[q] = true
 	}
 
-	parsedQueries := make([]*query.PromQuery, len(dedupedQueries))
+	parsedQueries := make([]*PromQuery, len(dedupedQueries))
 	for i, q := range dedupedQueries {
-		pq, err := query.New(q)
+		pq, err := NewPromQuery(q)
 		if err != nil {
 			return nil, err
 		}

@@ -1,4 +1,4 @@
-package query
+package promquery
 
 import (
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -77,7 +77,7 @@ func (q *PromQuery) String() string {
 	return q.expr.String()
 }
 
-func New(query string) (*PromQuery, error) {
+func NewPromQuery(query string) (*PromQuery, error) {
 	expr, err := promql.ParseExpr(query)
 	if err != nil {
 		return nil, err

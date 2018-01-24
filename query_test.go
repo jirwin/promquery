@@ -1,4 +1,4 @@
-package query
+package promquery
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestGetMetrics(t *testing.T) {
-	q, err := New(`sum(foo_metric{role="bar"}) - sum(qux_metric{role!="baz"} - up) - 3`)
+	q, err := NewPromQuery(`sum(foo_metric{role="bar"}) - sum(qux_metric{role!="baz"} - up) - 3`)
 	require.NoError(t, err)
 
 	metrics := q.getMetrics()
@@ -26,7 +26,7 @@ func TestGetMetrics(t *testing.T) {
 }
 
 func TestAddRegexpLabel(t *testing.T) {
-	q, err := New(`foo_metric{role="bar"} - qux_metric{role!="baz"}`)
+	q, err := NewPromQuery(`foo_metric{role="bar"} - qux_metric{role!="baz"}`)
 	require.NoError(t, err)
 
 	metrics := q.getMetrics()
@@ -45,7 +45,7 @@ func TestAddRegexpLabel(t *testing.T) {
 }
 
 func TestAddNonEqualRegexpLabel(t *testing.T) {
-	q, err := New(`foo_metric{role="bar"} - qux_metric{role!="baz"}`)
+	q, err := NewPromQuery(`foo_metric{role="bar"} - qux_metric{role!="baz"}`)
 	require.NoError(t, err)
 
 	metrics := q.getMetrics()
@@ -64,7 +64,7 @@ func TestAddNonEqualRegexpLabel(t *testing.T) {
 }
 
 func TestAddEqualLabel(t *testing.T) {
-	q, err := New(`foo_metric{role="bar"} - qux_metric{role!="baz"}`)
+	q, err := NewPromQuery(`foo_metric{role="bar"} - qux_metric{role!="baz"}`)
 	require.NoError(t, err)
 
 	metrics := q.getMetrics()
@@ -83,7 +83,7 @@ func TestAddEqualLabel(t *testing.T) {
 }
 
 func TestAddNonEqualLabel(t *testing.T) {
-	q, err := New(`foo_metric{role="bar"} - qux_metric{role!="baz"}`)
+	q, err := NewPromQuery(`foo_metric{role="bar"} - qux_metric{role!="baz"}`)
 	require.NoError(t, err)
 
 	metrics := q.getMetrics()

@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/jirwin/promquery/poller"
+	"github.com/jirwin/promquery"
 	"gopkg.in/urfave/cli.v2"
 )
 
@@ -22,7 +22,7 @@ func PollerAction(c *cli.Context) error {
 	queries := c.StringSlice("query")
 
 	ctx := context.Background()
-	p, err := poller.NewPoller(addr, queries)
+	p, err := promquery.NewPoller(addr, queries)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("error creating poller: %s %#v", err.Error(), queries), -1)
 	}
