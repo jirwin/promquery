@@ -21,38 +21,50 @@ type Poller struct {
 	timer         monotime.Timer
 }
 
-func (p *Poller) query(ctx context.Context, q string) (string, error) {
-	val, err := p.client.Query(ctx, q, time.Now())
-	if err != nil {
-		return "", err
-	}
-
-	if v, ok := val.(model.Vector); ok {
-		if len(v) != 1 {
-			return "", fmt.Errorf("queries must return exactly one value")
+func (p *Poller) query(ctx context.Context, q string) (<-chan string, <-chan error) {
+	resultChan := make(chan string)
+	errChan := make(chan error)
+	go func() {
+		val, err := p.client.Query(ctx, q, time.Now())
+		if err != nil {
+			errChan <- err
+			return
 		}
 
-		return v[0].Value.String(), nil
-	} else {
-		return "", fmt.Errorf("got unexpected result from %s: %#v", q, v)
-	}
+		if v, ok := val.(model.Vector); ok {
+			if len(v) != 1 {
+				errChan <- fmt.Errorf("queries must return exactly one value")
+				return
+			}
+
+			resultChan <- v[0].Value.String()
+		} else {
+			errChan <- fmt.Errorf("got unexpected result from %s: %#v", q, v)
+		}
+	}()
+
+	return resultChan, errChan
 }
 
 func (p *Poller) getInitialValue(ctx context.Context, q *PromQuery) error {
-	val, err := p.query(ctx, q.String())
-	if err != nil {
+	resultChan, errChan := p.query(ctx, q.String())
+
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context was cancelled")
+
+	case result := <-resultChan:
+		fmt.Printf("Initial value for %s: %s\n", q.String(), result)
+		p.initialValues.Store(q.String(), result)
+
+	case err := <-errChan:
 		return err
 	}
-
-	fmt.Printf("Initial value for %s: %s\n", q.String(), val)
-	p.initialValues.Store(q.String(), val)
 
 	return nil
 }
 
 func (p *Poller) Init(ctx context.Context) {
-	p.timer = monotime.New()
-
 	fmt.Println("Gathering initial values...")
 
 	wg := sync.WaitGroup{}
@@ -74,9 +86,8 @@ func (p *Poller) Init(ctx context.Context) {
 func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan bool {
 	done := make(chan bool)
 
-	//ctx1, _ := context.WithTimeout(ctx, 2 * time.Minute)
-
 	go func() {
+		p.timer = monotime.New()
 		wg := sync.WaitGroup{}
 		for _, q := range p.queries {
 			wg.Add(1)
@@ -93,21 +104,28 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan bool {
 					return
 				}
 
-				for true {
+			PollLoop:
+				for {
 					fmt.Printf("Waiting %s before polling for %s\n", interval, q.String())
 					pollTimer := time.NewTimer(interval)
 					<-pollTimer.C
 
-					pollVal, err := p.query(ctx, q.String())
-					if err != nil {
+					resultChan, errChan := p.query(ctx, q.String())
+					select {
+					case <-ctx.Done():
+						fmt.Println("error: timed out while waiting for metrics to normalize")
+						break PollLoop
+
+					case result := <-resultChan:
+						fmt.Printf("Polling value(%s) for %s: %s\n", p.timer.Elapsed(), q.String(), result)
+
+						if targetVal == result {
+							break PollLoop
+						}
+
+					case err := <-errChan:
 						fmt.Printf("error while polling %s: %s\n", q.String(), err.Error())
 						continue
-					}
-
-					fmt.Printf("Polling value for %s: %s\n", q.String(), pollVal)
-
-					if targetVal == pollVal {
-						break
 					}
 				}
 

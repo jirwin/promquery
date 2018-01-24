@@ -28,7 +28,8 @@ func PollerAction(c *cli.Context) error {
 	}
 
 	p.Init(ctx)
-	done := p.Wait(ctx, time.Duration(c.Int("interval"))*time.Second)
+	ctx1, _ := context.WithTimeout(ctx, time.Duration(c.Int("timeout"))*time.Second)
+	done := p.Wait(ctx1, time.Duration(c.Int("interval"))*time.Second)
 
 	<-done
 	return nil
@@ -51,6 +52,11 @@ func main() {
 				Name:  "interval",
 				Usage: "The number of seconds to wait before checking metrics (defaults to 30)",
 				Value: 30,
+			},
+			&cli.IntFlag{
+				Name:  "timeout",
+				Usage: "The number of seconds to wait before failing",
+				Value: 120,
 			},
 		},
 		Action: PollerAction,
