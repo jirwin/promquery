@@ -2,11 +2,14 @@ package promquery
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"sync"
 
 	"fmt"
+
+	"strconv"
 
 	"github.com/ScaleFT/monotime"
 	"github.com/prometheus/client_golang/api"
@@ -15,10 +18,11 @@ import (
 )
 
 type Poller struct {
-	client        prometheus.API
-	Queries       []*PromQuery
-	initialValues sync.Map
-	timer         monotime.Timer
+	client          prometheus.API
+	Queries         []*PromQuery
+	initialValueMap sync.Map
+	stddevMap       sync.Map
+	timer           monotime.Timer
 }
 
 func (p *Poller) query(ctx context.Context, q string) (<-chan string, <-chan error) {
@@ -33,7 +37,7 @@ func (p *Poller) query(ctx context.Context, q string) (<-chan string, <-chan err
 
 		if v, ok := val.(model.Vector); ok {
 			if len(v) != 1 {
-				errChan <- fmt.Errorf("queries must return exactly one value")
+				errChan <- fmt.Errorf("queries must return exactly one metric")
 				return
 			}
 
@@ -46,16 +50,81 @@ func (p *Poller) query(ctx context.Context, q string) (<-chan string, <-chan err
 	return resultChan, errChan
 }
 
-func (p *Poller) getInitialValue(ctx context.Context, q *PromQuery) error {
-	resultChan, errChan := p.query(ctx, q.String())
+func (p *Poller) query_range(ctx context.Context, q string, start, end time.Time, step time.Duration) (<-chan []string, <-chan error) {
+	resultChan := make(chan []string)
+	errChan := make(chan error)
+	go func() {
+		qrange := prometheus.Range{
+			Start: start,
+			End:   end,
+			Step:  step,
+		}
+		val, err := p.client.QueryRange(ctx, q, qrange)
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		if v, ok := val.(model.Matrix); ok {
+			if len(v) != 1 {
+				errChan <- fmt.Errorf("queries must return exactly one metric")
+				return
+			}
+
+			values := []string{}
+			for _, metricVal := range v[0].Values {
+				values = append(values, metricVal.Value.String())
+			}
+			resultChan <- values
+		} else {
+			errChan <- fmt.Errorf("got unexpected result from %s: %#v", q, v)
+		}
+	}()
+
+	return resultChan, errChan
+}
+
+func (p *Poller) calcStdDev(vals []string) (float64, float64, error) {
+	floatVals := make([]float64, len(vals))
+
+	for i, v := range vals {
+		floatVal, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		floatVals[i] = floatVal
+	}
+
+	var sum, squaredSum, count float64
+	for _, v := range floatVals {
+		sum += v
+		squaredSum += v * v
+		count++
+	}
+	avg := sum / count
+
+	return math.Sqrt(float64(squaredSum/count - avg*avg)), floatVals[len(floatVals)-1], nil
+}
+
+func (p *Poller) getInitValues(ctx context.Context, q *PromQuery) error {
+	now := time.Now().UTC()
+	resultChan, errChan := p.query_range(ctx, q.String(), now.Add(-30*time.Minute), now, 30*time.Second)
 
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("context was cancelled")
 
 	case result := <-resultChan:
-		fmt.Printf("Initial value for %s: %s\n", q.String(), result)
-		p.initialValues.Store(q.String(), result)
+		stddev, latest, err := p.calcStdDev(result)
+		if err != nil {
+			return err
+		}
+
+		p.stddevMap.Store(q.String(), stddev)
+		p.initialValueMap.Store(q.String(), latest)
+
+		fmt.Printf("Initial values for %s: stddev: %0.4f, initial val: %0.4f\n", q.String(), stddev, latest)
 
 	case err := <-errChan:
 		return err
@@ -72,9 +141,9 @@ func (p *Poller) Init(ctx context.Context) {
 		wg.Add(1)
 		go func(q *PromQuery) {
 			defer wg.Done()
-			err := p.getInitialValue(ctx, q)
+			err := p.getInitValues(ctx, q)
 			if err != nil {
-				fmt.Printf("error getting initial value for %s: %s\n", q.String(), err.Error())
+				fmt.Printf("error getting stddev for %s: %s\n", q.String(), err.Error())
 				return
 			}
 		}(q)
@@ -83,61 +152,91 @@ func (p *Poller) Init(ctx context.Context) {
 	wg.Wait()
 }
 
-func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan bool {
-	done := make(chan bool)
-
+func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan error {
+	doneChan := make(chan error)
 	go func() {
 		p.timer = monotime.New()
-		wg := sync.WaitGroup{}
-		for _, q := range p.Queries {
-			wg.Add(1)
-			go func(q *PromQuery) {
-				defer wg.Done()
-				startingValue, ok := p.initialValues.Load(q.String())
-				if !ok {
-					fmt.Println("unable to find initial value for query", q.String())
-					return
-				}
-				targetVal, ok := startingValue.(string)
-				if !ok {
-					fmt.Println("initial value for query is invalid", q.String())
-					return
-				}
 
-			PollLoop:
-				for {
-					fmt.Printf("Waiting %s before polling for %s\n", interval, q.String())
-					pollTimer := time.NewTimer(interval)
-					<-pollTimer.C
+		wait := make(chan struct{})
+		waitErr := make(chan error)
+		ctx1, canc := context.WithCancel(ctx)
+		defer canc()
 
-					resultChan, errChan := p.query(ctx, q.String())
-					select {
-					case <-ctx.Done():
-						fmt.Println("error: timed out while waiting for metrics to normalize")
-						break PollLoop
+		go func() {
+			wg := sync.WaitGroup{}
 
-					case result := <-resultChan:
-						fmt.Printf("Polling value(%s) for %s: %s\n", p.timer.Elapsed(), q.String(), result)
-
-						if targetVal == result {
-							break PollLoop
-						}
-
-					case err := <-errChan:
-						fmt.Printf("error while polling %s: %s\n", q.String(), err.Error())
-						continue
+			for _, q := range p.Queries {
+				wg.Add(1)
+				go func(q *PromQuery) {
+					defer wg.Done()
+					stddevMapItem, ok := p.stddevMap.Load(q.String())
+					if !ok {
+						waitErr <- fmt.Errorf("error: unable to find stddev for query(%s)", q.String())
+						return
 					}
-				}
+					stddev, ok := stddevMapItem.(float64)
+					if !ok {
+						waitErr <- fmt.Errorf("error: stddev for query(%s) is invalid", q.String())
+						return
+					}
 
-			}(q)
+					initValMapItem, ok := p.initialValueMap.Load(q.String())
+					if !ok {
+						waitErr <- fmt.Errorf("error: unable to find initial value for query(%s)", q.String())
+						return
+					}
+					initVal, ok := initValMapItem.(float64)
+					if !ok {
+						waitErr <- fmt.Errorf("error: initial value for query(%s) is invalid", q.String())
+						return
+					}
+
+					for {
+						fmt.Printf("Waiting %s (%s elapsed) to poll for metrics\n", interval, p.timer.Elapsed())
+						pollTimer := time.NewTimer(interval)
+						<-pollTimer.C
+
+						resultChan, errChan := p.query(ctx1, q.String())
+						select {
+						case <-ctx1.Done():
+							waitErr <- fmt.Errorf("error while polling metrics: %s", ctx1.Err().Error())
+							return
+
+						case result := <-resultChan:
+							resVal, err := strconv.ParseFloat(result, 64)
+							if err != nil {
+								waitErr <- err
+							}
+							delta := math.Abs(initVal - resVal)
+							if delta <= stddev {
+								return
+							}
+
+						case err := <-errChan:
+							fmt.Printf("error while polling %s: %s\n", q.String(), err.Error())
+							continue
+						}
+					}
+				}(q)
+			}
+
+			wg.Wait()
+			close(wait)
+		}()
+
+		select {
+		case <-wait:
+			doneChan <- nil
+
+		case err := <-waitErr:
+			doneChan <- err
+
+		case <-ctx.Done():
+			doneChan <- fmt.Errorf("context was cancelled before polling was complete: %s", ctx.Err().Error())
 		}
-
-		wg.Wait()
-
-		done <- true
 	}()
 
-	return done
+	return doneChan
 }
 
 func NewPoller(addr string, queries []string) (*Poller, error) {
