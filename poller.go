@@ -16,7 +16,7 @@ import (
 
 type Poller struct {
 	client        prometheus.API
-	queries       []*PromQuery
+	Queries       []*PromQuery
 	initialValues sync.Map
 	timer         monotime.Timer
 }
@@ -68,7 +68,7 @@ func (p *Poller) Init(ctx context.Context) {
 	fmt.Println("Gathering initial values...")
 
 	wg := sync.WaitGroup{}
-	for _, q := range p.queries {
+	for _, q := range p.Queries {
 		wg.Add(1)
 		go func(q *PromQuery) {
 			defer wg.Done()
@@ -89,7 +89,7 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan bool {
 	go func() {
 		p.timer = monotime.New()
 		wg := sync.WaitGroup{}
-		for _, q := range p.queries {
+		for _, q := range p.Queries {
 			wg.Add(1)
 			go func(q *PromQuery) {
 				defer wg.Done()
@@ -171,6 +171,6 @@ func NewPoller(addr string, queries []string) (*Poller, error) {
 
 	return &Poller{
 		client:  prometheus.NewAPI(client),
-		queries: parsedQueries,
+		Queries: parsedQueries,
 	}, nil
 }
