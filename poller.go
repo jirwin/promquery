@@ -11,6 +11,8 @@ import (
 
 	"strconv"
 
+	"math/rand"
+
 	"github.com/ScaleFT/monotime"
 	"github.com/prometheus/client_golang/api"
 	prometheus "github.com/prometheus/client_golang/api/prometheus/v1"
@@ -239,7 +241,9 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan error 
 	return doneChan
 }
 
-func NewPoller(addr string, queries []string) (*Poller, error) {
+func NewPoller(addrs []string, queries []string) (*Poller, error) {
+	// We are given a slice of possible addrs to connect to. Pick a random one and go with it.
+	addr := addrs[rand.Intn(len(addrs))]
 	client, err := api.NewClient(api.Config{
 		Address: addr,
 	})
