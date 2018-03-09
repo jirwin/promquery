@@ -23,6 +23,7 @@ type Poller struct {
 	client          prometheus.API
 	Queries         []*PromQuery
 	initialValueMap sync.Map
+	initialFoundMap sync.Map
 	stddevMap       sync.Map
 	timer           monotime.Timer
 }
@@ -68,6 +69,11 @@ func (p *Poller) query_range(ctx context.Context, q string, start, end time.Time
 		}
 
 		if v, ok := val.(model.Matrix); ok {
+			if len(v) == 0 {
+				resultChan <- []string{}
+				return
+			}
+
 			if len(v) != 1 {
 				errChan <- fmt.Errorf("queries must return exactly one metric")
 				return
@@ -118,11 +124,18 @@ func (p *Poller) getInitValues(ctx context.Context, q *PromQuery) error {
 		return fmt.Errorf("context was cancelled")
 
 	case result := <-resultChan:
+		if len(result) == 0 {
+			fmt.Printf("No initial values for %s found, will skip while waiting\n", q.String())
+			p.initialFoundMap.Store(q.String(), false)
+			return nil
+		}
+
 		stddev, latest, err := p.calcStdDev(result)
 		if err != nil {
 			return err
 		}
 
+		p.initialFoundMap.Store(q.String(), true)
 		p.stddevMap.Store(q.String(), stddev)
 		p.initialValueMap.Store(q.String(), latest)
 
@@ -168,6 +181,22 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan error 
 			wg := sync.WaitGroup{}
 
 			for _, q := range p.Queries {
+				foundMapItem, ok := p.initialFoundMap.Load(q.String())
+				if !ok {
+					waitErr <- fmt.Errorf("error: unable to find found entry for query(%s)", q.String())
+					continue
+				}
+				found, ok := foundMapItem.(bool)
+				if !ok {
+					waitErr <- fmt.Errorf("error: found entry for query(%s) is invalid", q.String())
+					continue
+				}
+
+				if !found {
+					fmt.Printf("didn't find initial values for query(%s), not waiting for it to resolve\n", q.String())
+					continue
+				}
+
 				wg.Add(1)
 				go func(q *PromQuery) {
 					defer wg.Done()
