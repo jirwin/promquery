@@ -16,9 +16,6 @@ func PollerAction(c *cli.Context) error {
 	}
 	addr := c.String("addr")
 
-	if !c.IsSet("query") {
-		return cli.Exit("--query is required", -1)
-	}
 	queries := c.StringSlice("query")
 
 	ctx := context.Background()

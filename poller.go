@@ -180,75 +180,79 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan error 
 		go func() {
 			wg := sync.WaitGroup{}
 
-			for _, q := range p.Queries {
-				foundMapItem, ok := p.initialFoundMap.Load(q.String())
-				if !ok {
-					waitErr <- fmt.Errorf("error: unable to find found entry for query(%s)", q.String())
-					continue
-				}
-				found, ok := foundMapItem.(bool)
-				if !ok {
-					waitErr <- fmt.Errorf("error: found entry for query(%s) is invalid", q.String())
-					continue
-				}
-
-				if !found {
-					fmt.Printf("didn't find initial values for query(%s), not waiting for it to resolve\n", q.String())
-					continue
-				}
-
-				wg.Add(1)
-				go func(q *PromQuery) {
-					defer wg.Done()
-					stddevMapItem, ok := p.stddevMap.Load(q.String())
+			// If there aren't any queries, wait a single polling period before continuing.
+			if len(p.Queries) == 0 {
+				<-time.After(interval)
+			} else {
+				for _, q := range p.Queries {
+					foundMapItem, ok := p.initialFoundMap.Load(q.String())
 					if !ok {
-						waitErr <- fmt.Errorf("error: unable to find stddev for query(%s)", q.String())
-						return
+						waitErr <- fmt.Errorf("error: unable to find found entry for query(%s)", q.String())
+						continue
 					}
-					stddev, ok := stddevMapItem.(float64)
+					found, ok := foundMapItem.(bool)
 					if !ok {
-						waitErr <- fmt.Errorf("error: stddev for query(%s) is invalid", q.String())
-						return
+						waitErr <- fmt.Errorf("error: found entry for query(%s) is invalid", q.String())
+						continue
 					}
 
-					initValMapItem, ok := p.initialValueMap.Load(q.String())
-					if !ok {
-						waitErr <- fmt.Errorf("error: unable to find initial value for query(%s)", q.String())
-						return
-					}
-					initVal, ok := initValMapItem.(float64)
-					if !ok {
-						waitErr <- fmt.Errorf("error: initial value for query(%s) is invalid", q.String())
-						return
+					if !found {
+						fmt.Printf("didn't find initial values for query(%s), not waiting for it to resolve\n", q.String())
+						continue
 					}
 
-					for {
-						fmt.Printf("Waiting %s (%s elapsed) to poll for metrics\n", interval, p.timer.Elapsed())
-						pollTimer := time.NewTimer(interval)
-						<-pollTimer.C
-
-						resultChan, errChan := p.query(ctx1, q.String())
-						select {
-						case <-ctx1.Done():
-							waitErr <- fmt.Errorf("error while polling metrics: %s", ctx1.Err().Error())
+					wg.Add(1)
+					go func(q *PromQuery) {
+						defer wg.Done()
+						stddevMapItem, ok := p.stddevMap.Load(q.String())
+						if !ok {
+							waitErr <- fmt.Errorf("error: unable to find stddev for query(%s)", q.String())
 							return
-
-						case result := <-resultChan:
-							resVal, err := strconv.ParseFloat(result, 64)
-							if err != nil {
-								waitErr <- err
-							}
-							delta := math.Abs(initVal - resVal)
-							if delta <= stddev {
-								return
-							}
-
-						case err := <-errChan:
-							fmt.Printf("error while polling %s: %s\n", q.String(), err.Error())
-							continue
 						}
-					}
-				}(q)
+						stddev, ok := stddevMapItem.(float64)
+						if !ok {
+							waitErr <- fmt.Errorf("error: stddev for query(%s) is invalid", q.String())
+							return
+						}
+
+						initValMapItem, ok := p.initialValueMap.Load(q.String())
+						if !ok {
+							waitErr <- fmt.Errorf("error: unable to find initial value for query(%s)", q.String())
+							return
+						}
+						initVal, ok := initValMapItem.(float64)
+						if !ok {
+							waitErr <- fmt.Errorf("error: initial value for query(%s) is invalid", q.String())
+							return
+						}
+
+						for {
+							fmt.Printf("Waiting %s (%s elapsed) to poll for metrics\n", interval, p.timer.Elapsed())
+							<-time.After(interval)
+
+							resultChan, errChan := p.query(ctx1, q.String())
+							select {
+							case <-ctx1.Done():
+								waitErr <- fmt.Errorf("error while polling metrics: %s", ctx1.Err().Error())
+								return
+
+							case result := <-resultChan:
+								resVal, err := strconv.ParseFloat(result, 64)
+								if err != nil {
+									waitErr <- err
+								}
+								delta := math.Abs(initVal - resVal)
+								if delta <= stddev {
+									return
+								}
+
+							case err := <-errChan:
+								fmt.Printf("error while polling %s: %s\n", q.String(), err.Error())
+								continue
+							}
+						}
+					}(q)
+				}
 			}
 
 			wg.Wait()

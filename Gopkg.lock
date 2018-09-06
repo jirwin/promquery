@@ -142,8 +142,7 @@
     "util/strutil",
     "util/testutil"
   ]
-  revision = "71af5e29e815795e9dd14742ee7725682fa14b7b"
-  version = "v2.3.2"
+  revision = "85f23d82a045d103ea7f3c89a91fba4a93e6367a"
 
 [[projects]]
   branch = "master"
@@ -198,6 +197,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "1e1d4bb19a04ac8dca3ed8f8f35066a953096949beccaa8a9f17ffffc99c82d5"
+  inputs-digest = "ed7aa0d195c1a4751a73bdf4a025567174ae2d0c140336a2a35dd2544f0ec59e"
   solver-name = "gps-cdcl"
   solver-version = 1
