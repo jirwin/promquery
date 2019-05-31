@@ -22,6 +22,7 @@ import (
 type Poller struct {
 	client          prometheus.API
 	Queries         []*PromQuery
+	SuccessCount    int
 	initialValueMap sync.Map
 	initialFoundMap sync.Map
 	stddevMap       sync.Map
@@ -226,6 +227,9 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan error 
 							return
 						}
 
+						// Used to track how many queries have been returned within the standard deviation
+						successful := 0
+
 						for {
 							fmt.Printf("Waiting %s (%s elapsed) to poll for metrics\n", interval, p.timer.Elapsed())
 							<-time.After(interval)
@@ -240,14 +244,24 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan error 
 								resVal, err := strconv.ParseFloat(result, 64)
 								if err != nil {
 									waitErr <- err
+									successful = 0
+									continue
 								}
 								delta := math.Abs(initVal - resVal)
 								if delta <= stddev {
-									return
+									if successful >= p.SuccessCount {
+										return
+									}
+									successful++
+									continue
+								} else {
+									successful = 0
+									continue
 								}
 
 							case err := <-errChan:
 								fmt.Printf("error while polling %s: %s\n", q.String(), err.Error())
+								successful = 0
 								continue
 							}
 						}
@@ -274,7 +288,7 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan error 
 	return doneChan
 }
 
-func NewPoller(addrs []string, queries []string) (*Poller, error) {
+func NewPoller(addrs []string, queries []string, successCount int) (*Poller, error) {
 	// We are given a slice of possible addrs to connect to. Pick a random one and go with it.
 	addr := addrs[rand.Intn(len(addrs))]
 	client, err := api.NewClient(api.Config{
@@ -306,7 +320,8 @@ func NewPoller(addrs []string, queries []string) (*Poller, error) {
 	}
 
 	return &Poller{
-		client:  prometheus.NewAPI(client),
-		Queries: parsedQueries,
+		client:       prometheus.NewAPI(client),
+		Queries:      parsedQueries,
+		SuccessCount: successCount,
 	}, nil
 }
