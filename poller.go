@@ -112,7 +112,14 @@ func (p *Poller) calcStdDev(vals []string) (float64, float64, error) {
 	}
 	avg := sum / count
 
-	return math.Sqrt(float64(squaredSum/count - avg*avg)), floatVals[len(floatVals)-1], nil
+	// If we're dealing with smaller numbers we can hit the floating point precision limit
+	// or a negative number in the square root, in which case return 0
+	stdDev := math.Sqrt(float64(squaredSum/count - avg*avg))
+	if math.IsNaN(stdDev) {
+		stdDev = float64(0.0)
+	}
+
+	return stdDev, floatVals[len(floatVals)-1], nil
 }
 
 func (p *Poller) getInitValues(ctx context.Context, q *PromQuery) error {
