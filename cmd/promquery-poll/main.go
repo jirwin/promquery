@@ -19,7 +19,7 @@ func PollerAction(c *cli.Context) error {
 	queries := c.StringSlice("query")
 
 	ctx := context.Background()
-	p, err := promquery.NewPoller([]string{addr}, queries)
+	p, err := promquery.NewPoller([]string{addr}, queries, 1)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("error creating poller: %s %#v", err.Error(), queries), -1)
 	}

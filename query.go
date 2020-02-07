@@ -16,19 +16,17 @@ type PromQuery struct {
 
 func (q *PromQuery) getMetrics() []*promql.VectorSelector {
 	metrics := []*promql.VectorSelector{}
-	promql.Inspect(q.expr, func(n promql.Node) bool {
+	promql.Inspect(q.expr, func(n promql.Node, _ []promql.Node) error {
 		if n == nil {
-			return false
+			return nil
 		}
 
 		switch expr := n.(type) {
 		case *promql.VectorSelector:
 			metrics = append(metrics, expr)
-			return false
-
-		default:
-			return true
 		}
+
+		return nil
 	})
 
 	return metrics

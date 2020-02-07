@@ -33,7 +33,7 @@ func (p *Poller) query(ctx context.Context, q string) (<-chan string, <-chan err
 	resultChan := make(chan string)
 	errChan := make(chan error)
 	go func() {
-		val, err := p.client.Query(ctx, q, time.Now())
+		val, _, err := p.client.Query(ctx, q, time.Now())
 		if err != nil {
 			errChan <- err
 			return
@@ -63,7 +63,7 @@ func (p *Poller) query_range(ctx context.Context, q string, start, end time.Time
 			End:   end,
 			Step:  step,
 		}
-		val, err := p.client.QueryRange(ctx, q, qrange)
+		val,_,  err := p.client.QueryRange(ctx, q, qrange)
 		if err != nil {
 			errChan <- err
 			return
