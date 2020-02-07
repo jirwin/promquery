@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jirwin/promquery"
-	"gopkg.in/urfave/cli.v2"
+	"github.com/urfave/cli/v2"
 )
 
 func PollerAction(c *cli.Context) error {
