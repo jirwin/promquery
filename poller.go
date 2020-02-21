@@ -260,6 +260,7 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration, deadline time
 									successful = 0
 									continue
 								}
+								metricChan <- fmt.Sprintf("initial value %g, current value %g (%s elapsed)", initVal, resVal, p.timer.Elapsed())
 								delta := math.Abs(initVal - resVal)
 								if delta <= stddev {
 									if successful >= p.SuccessCount {
@@ -268,7 +269,6 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration, deadline time
 									successful++
 									continue
 								} else {
-									metricChan <- fmt.Sprintf("initial value %g, current value %g (%s elapsed)", initVal, resVal, p.timer.Elapsed())
 									successful = 0
 									continue
 								}
