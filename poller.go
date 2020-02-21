@@ -175,7 +175,8 @@ func (p *Poller) Init(ctx context.Context) {
 	wg.Wait()
 }
 
-func (p *Poller) Wait(ctx context.Context, interval time.Duration, deadline time.Duration) <-chan error {
+func (p *Poller) Wait(ctx context.Context, interval time.Duration, deadline time.Duration) (<-chan string, <-chan error) {
+	metricChan := make(chan string)
 	doneChan := make(chan error)
 	go func() {
 		p.timer = monotime.New()
@@ -267,6 +268,7 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration, deadline time
 									successful++
 									continue
 								} else {
+									metricChan <- fmt.Sprintf("initial value %g, current value %g (%s elapsed)", initVal, resVal, p.timer.Elapsed())
 									successful = 0
 									continue
 								}
@@ -297,7 +299,7 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration, deadline time
 		}
 	}()
 
-	return doneChan
+	return metricChan, doneChan
 }
 
 func NewPoller(addrs []string, queries []string, successCount int) (*Poller, error) {
