@@ -175,7 +175,7 @@ func (p *Poller) Init(ctx context.Context) {
 	wg.Wait()
 }
 
-func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan error {
+func (p *Poller) Wait(ctx context.Context, interval time.Duration, deadline time.Duration) <-chan error {
 	doneChan := make(chan error)
 	go func() {
 		p.timer = monotime.New()
@@ -238,6 +238,11 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration) <-chan error 
 						successful := 0
 
 						for {
+							if p.timer.Elapsed() > deadline {
+								waitErr <- fmt.Errorf("error: elapsed time exceeded deadline")
+								return
+							}
+
 							fmt.Printf("Waiting %s (%s elapsed) to poll for metrics\n", interval, p.timer.Elapsed())
 							<-time.After(interval)
 
