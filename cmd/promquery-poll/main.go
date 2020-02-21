@@ -26,8 +26,9 @@ func PollerAction(c *cli.Context) error {
 
 	p.Init(ctx)
 	ctx1, _ := context.WithTimeout(ctx, time.Duration(c.Int("timeout"))*time.Second)
-	err = <-p.Wait(ctx1, time.Duration(c.Int("interval"))*time.Second)
-	if err != nil {
+
+	_, resultChan := p.Wait(ctx1, time.Duration(c.Int("interval"))*time.Second, time.Duration(c.Int("timeout"))*time.Second)
+	if err := <-resultChan; err != nil {
 		return cli.Exit(fmt.Sprintf("error polling metrics: %s", err.Error()), -1)
 	}
 	return nil
