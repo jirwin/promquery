@@ -34,9 +34,10 @@ func PollerAction(c *cli.Context) error {
 			if err != nil {
 				return cli.Exit(fmt.Sprintf("error polling metrics: %s", err.Error()), -1)
 			}
-			break
+			return nil
 		case msg := <-metricsChan:
-			fmt.Printf("Metrics settling, %s.", msg)
+			fmt.Printf("Metrics settling, %s\n", msg)
+		default:
 		}
 	}
 	return nil
