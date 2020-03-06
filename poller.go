@@ -175,7 +175,7 @@ func (p *Poller) Init(ctx context.Context) {
 	wg.Wait()
 }
 
-func (p *Poller) Wait(ctx context.Context, interval time.Duration, NotifyMetrics func(string)) <-chan error {
+func (p *Poller) Wait(ctx context.Context, interval time.Duration, notifyMetrics func(string)) <-chan error {
 	doneChan := make(chan error)
 	go func() {
 		p.timer = monotime.New()
@@ -255,7 +255,9 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration, NotifyMetrics
 									continue
 								}
 
-								NotifyMetrics(fmt.Sprintf("initial value %g, current value %g (%s elapsed)", initVal, resVal, p.timer.Elapsed()))
+								if notifyMetrics != nil {
+									notifyMetrics(fmt.Sprintf("initial value %g, current value %g (%s elapsed)", initVal, resVal, p.timer.Elapsed()))
+								}
 
 								delta := math.Abs(initVal - resVal)
 								if delta <= stddev {
