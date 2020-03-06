@@ -10,6 +10,10 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+func notify(msg string) {
+	fmt.Printf("Metrics settling, %s.\n", msg)
+}
+
 func PollerAction(c *cli.Context) error {
 	if !c.IsSet("addr") {
 		return cli.Exit("--addr is required", -1)
@@ -26,7 +30,7 @@ func PollerAction(c *cli.Context) error {
 
 	p.Init(ctx)
 	ctx1, _ := context.WithTimeout(ctx, time.Duration(c.Int("timeout"))*time.Second)
-	err = <-p.Wait(ctx1, time.Duration(c.Int("interval"))*time.Second)
+	err = <-p.Wait(ctx1, time.Duration(c.Int("interval"))*time.Second, notify)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("error polling metrics: %s", err.Error()), -1)
 	}
