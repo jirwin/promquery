@@ -10,13 +10,13 @@ import (
 //   - sum(ztap_active_configs) - sum(ztap_total_configs)
 
 type PromQuery struct {
-	query string
-	expr  promql.Expr
+	Query string
+	Expr  promql.Expr
 }
 
 func (q *PromQuery) getMetrics() []*promql.VectorSelector {
 	metrics := []*promql.VectorSelector{}
-	promql.Inspect(q.expr, func(n promql.Node, _ []promql.Node) error {
+	promql.Inspect(q.Expr, func(n promql.Node, _ []promql.Node) error {
 		if n == nil {
 			return nil
 		}
@@ -72,7 +72,7 @@ func (q *PromQuery) appendLabel(matcher *labels.Matcher) {
 }
 
 func (q *PromQuery) String() string {
-	return q.expr.String()
+	return q.Expr.String()
 }
 
 func NewPromQuery(query string) (*PromQuery, error) {
@@ -82,7 +82,7 @@ func NewPromQuery(query string) (*PromQuery, error) {
 	}
 
 	return &PromQuery{
-		query: query,
-		expr:  expr,
+		Query: query,
+		Expr:  expr,
 	}, nil
 }
