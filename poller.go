@@ -63,7 +63,7 @@ func (p *Poller) query_range(ctx context.Context, q string, start, end time.Time
 			End:   end,
 			Step:  step,
 		}
-		val,_,  err := p.client.QueryRange(ctx, q, qrange)
+		val, _, err := p.client.QueryRange(ctx, q, qrange)
 		if err != nil {
 			errChan <- err
 			return
@@ -256,6 +256,7 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration, notifyMetrics
 								}
 
 								if notifyMetrics != nil {
+									fmt.Printf("initial value %g, current value %g (%s elapsed)", initVal, resVal, p.timer.Elapsed())
 									notifyMetrics(fmt.Sprintf("initial value %g, current value %g (%s elapsed)", initVal, resVal, p.timer.Elapsed()))
 								}
 

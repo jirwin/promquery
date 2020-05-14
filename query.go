@@ -14,24 +14,6 @@ type PromQuery struct {
 	expr  promql.Expr
 }
 
-func (q *PromQuery) getMetrics() []*promql.VectorSelector {
-	metrics := []*promql.VectorSelector{}
-	promql.Inspect(q.expr, func(n promql.Node, _ []promql.Node) error {
-		if n == nil {
-			return nil
-		}
-
-		switch expr := n.(type) {
-		case *promql.VectorSelector:
-			metrics = append(metrics, expr)
-		}
-
-		return nil
-	})
-
-	return metrics
-}
-
 func (q *PromQuery) AddLabel(name, value string, equal bool) error {
 	mt := labels.MatchEqual
 	if !equal {
@@ -65,10 +47,28 @@ func (q *PromQuery) AddRegexpLabel(name, value string, equal bool) error {
 }
 
 func (q *PromQuery) appendLabel(matcher *labels.Matcher) {
-	metrics := q.getMetrics()
-	for _, metric := range metrics {
-		metric.LabelMatchers = append(metric.LabelMatchers, matcher)
-	}
+	promql.Inspect(q.expr, func(n promql.Node, _ []promql.Node) error {
+		if n == nil {
+			return nil
+		}
+
+		switch n.(type) {
+		case *promql.VectorSelector:
+			vs, ok := n.(*promql.VectorSelector)
+			if !ok {
+				return nil
+			}
+			vs.LabelMatchers = append(vs.LabelMatchers, matcher)
+		case *promql.MatrixSelector:
+			ms, ok := n.(*promql.MatrixSelector)
+			if !ok {
+				return nil
+			}
+			ms.LabelMatchers = append(ms.LabelMatchers, matcher)
+		}
+
+		return nil
+	})
 }
 
 func (q *PromQuery) String() string {
