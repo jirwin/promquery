@@ -256,8 +256,9 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration, notifyMetrics
 								}
 
 								if notifyMetrics != nil {
-									fmt.Printf("initial value %g, current value %g (%s elapsed)", initVal, resVal, p.timer.Elapsed())
-									notifyMetrics(fmt.Sprintf("initial value %g, current value %g (%s elapsed)", initVal, resVal, p.timer.Elapsed()))
+									roundedElapsed := p.timer.Elapsed().Round(time.Millisecond)
+									notifyMetrics(fmt.Sprintf("initial value %.2f, current value %.2f (%s elapsed)", initVal, resVal, roundedElapsed))
+									fmt.Printf("initial value %.2f, current value %.2f (%s elapsed)", initVal, resVal, roundedElapsed)
 								}
 
 								delta := math.Abs(initVal - resVal)
