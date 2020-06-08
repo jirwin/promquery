@@ -19,6 +19,8 @@ import (
 	"github.com/prometheus/common/model"
 )
 
+const defaultLookback = -30 * time.Second
+
 type Poller struct {
 	client          prometheus.API
 	Queries         []*PromQuery
@@ -33,7 +35,11 @@ func (p *Poller) query(ctx context.Context, q string) (<-chan string, <-chan err
 	resultChan := make(chan string)
 	errChan := make(chan error)
 	go func() {
-		val, _, err := p.client.Query(ctx, q, time.Now())
+		// Look at metrics 30 seconds in the past so that we get values that have been completely scraped
+		// and won't be changing as often as the most recent metrics. This also prevents us from getting 0
+		// metrics from calls to Query when we should get consistent metric returns
+		t := time.Now().Add(defaultLookback)
+		val, _, err := p.client.Query(ctx, q, t)
 		if err != nil {
 			errChan <- err
 			return
@@ -58,9 +64,11 @@ func (p *Poller) query_range(ctx context.Context, q string, start, end time.Time
 	resultChan := make(chan []string)
 	errChan := make(chan error)
 	go func() {
+		// Look at metrics 30 seconds in the past so that we get values that have been completely scraped
+		// and won't be changed as often as most recent metrics
 		qrange := prometheus.Range{
-			Start: start,
-			End:   end,
+			Start: start.Add(defaultLookback),
+			End:   end.Add(defaultLookback),
 			Step:  step,
 		}
 		val, _, err := p.client.QueryRange(ctx, q, qrange)
