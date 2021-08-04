@@ -183,7 +183,7 @@ func (p *Poller) Init(ctx context.Context) {
 	wg.Wait()
 }
 
-func (p *Poller) Wait(ctx context.Context, interval time.Duration, notifyMetrics func(string)) <-chan error {
+func (p *Poller) Wait(ctx context.Context, interval time.Duration, stddevThreshold uint, notifyMetrics func(string)) <-chan error {
 	doneChan := make(chan error)
 	go func() {
 		p.timer = monotime.New()
@@ -270,7 +270,7 @@ func (p *Poller) Wait(ctx context.Context, interval time.Duration, notifyMetrics
 								}
 
 								delta := math.Abs(initVal - resVal)
-								if delta <= stddev {
+								if delta <= (stddev * float64(stddevThreshold)) {
 									if successful >= p.SuccessCount {
 										return
 									}
